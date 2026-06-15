@@ -76,30 +76,6 @@ For AI response mapping, always reach for a `record` first.
 
 ---
 
-### Prompt Templates — Separating Structure from Data
-
-Before we build the endpoint, let's understand an important concept: **Prompt Templates**.
-
-A prompt template is a prompt that contains **placeholders** — variables that get filled in at runtime with actual values. Think of it like a form letter where the structure is fixed, but the name and date get filled in each time.
-
-```java
-// Without a prompt template — concatenation is fragile and error-prone
-"Generate a customer profile for: " + jobTitle
-
-// With a prompt template — clean, readable, and safe
-"Generate a realistic fictional customer profile for someone with the job title: {jobTitle}."
-```
-
-**Why does this matter beyond cleanliness?**
-
-1. **Reusability** — the prompt structure is defined once and reused with different values
-2. **Readability** — it's immediately clear what is dynamic vs what is fixed
-3. **Prompt Injection Protection** — if a user passes malicious input (e.g. a `jobTitle` of `"Ignore all previous instructions and..."`), the template treats it as a data value, not as part of the prompt instruction. This is one of the most important security patterns in AI engineering.
-
-Spring AI implements prompt templates using `.user(u -> u.text("...{placeholder}...").param("placeholder", value))`.
-
----
-
 ### Building the Structured Output Endpoint
 
 In `AiController.java`, add a new endpoint that asks the AI to generate a customer profile and return it as a `CustomerProfile` object.
@@ -115,6 +91,22 @@ public CustomerProfile generateCustomer(@RequestParam String jobTitle) {
         .entity(CustomerProfile.class);
 }
 ```
+
+#### Prompt Templates — what is `.param()` doing here?
+
+Notice the `.user(u -> u.text("...{jobTitle}...").param("jobTitle", jobTitle))` pattern. This is a **Prompt Template** — a prompt that contains named placeholders `{...}` that get filled in at runtime with actual values.
+
+You could achieve the same result with string concatenation:
+```java
+// Without a prompt template — works but fragile
+.user("Generate a customer profile for: " + jobTitle)
+```
+
+But prompt templates are the better approach for three reasons:
+
+1. **Readability** — it's immediately clear what is dynamic vs what is fixed in the prompt
+2. **Reusability** — the prompt structure is defined once and reused with different values
+3. **Prompt Injection Protection** — if a user passes malicious input (e.g. a `jobTitle` of `"Ignore all previous instructions and..."`), the template treats it as a data value, not as part of the prompt instruction. This is one of the most important security patterns in AI engineering — always use `.param()` when injecting user input into a prompt.
 
 #### How `.entity()` works under the hood
 
@@ -133,16 +125,6 @@ It is possible — though uncommon with GPT-4o — for the model to return malfo
 
 > 💡 **Instructor Note — Native Structured Output:** Spring AI also supports a more reliable mode called **Native Structured Output**, enabled with `AdvisorParams.ENABLE_NATIVE_STRUCTURED_OUTPUT`. In native mode, the model's own JSON Schema enforcement is used — the model *guarantees* the output matches the schema, rather than just being instructed to try. This is the direction the industry is moving for production applications. For this lesson we use standard `.entity()` to understand the concept first — native mode is a one-line upgrade once you understand the foundation.
 
-Run the application and test:
-
-```
-localhost:8080/generate-customer?jobTitle=Software Engineer
-```
-
-You should see a proper JSON response — not a paragraph of text — that maps to your `CustomerProfile` fields.
-
-Try different job titles and observe how the AI generates different but consistently structured responses every time.
-
 ### Why This is Powerful
 
 Without structured output, if you asked the AI "generate a customer profile" you would get a paragraph like:
@@ -150,26 +132,15 @@ Without structured output, if you asked the AI "generate a customer profile" you
 
 With structured output, you get a proper Java object that you can immediately use in your application — pass to a service, save to a database, or return as a clean API response. This is how real AI-powered applications work.
 
----
+Now run the application and test it yourself — try a few different job titles:
 
-### 🧑‍💻 Activity 1 **(15 minutes)**
-
-Create a new record called `ProductRecommendation` with the following fields:
-
-```java
-package sg.edu.ntu;
-
-public record ProductRecommendation(
-    String productName,
-    String category,
-    String targetAudience,
-    double estimatedPrice
-) {}
+```
+localhost:8080/generate-customer?jobTitle=Software Engineer
+localhost:8080/generate-customer?jobTitle=Marketing Manager
+localhost:8080/generate-customer?jobTitle=Data Scientist
 ```
 
-Add a new endpoint `/recommend-product` that accepts a `@RequestParam String interest` and asks the AI to recommend a product for someone with that interest. Return the result as a `ProductRecommendation` object.
-
-Test with a few different interests (e.g. `photography`, `gaming`, `cooking`) and observe the structured responses.
+Notice that every response is a clean, consistently structured JSON object — not a paragraph of text. This is the foundation that makes AI responses usable in real application code.
 
 ---
 
@@ -317,7 +288,7 @@ This is exactly how ChatGPT and similar applications work at a high level — ea
 
 ---
 
-### 🧑‍💻 Activity 2 **(15 minutes)**
+### 🧑‍💻 Activity **(15 minutes)**
 
 Build a memory-enabled **CRM assistant** endpoint `/crm-assistant` in `MemoryChatController.java` that:
 
